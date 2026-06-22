@@ -1,0 +1,39 @@
+# Hotspot identification
+
+1. Run cProfile or torch.profiler on the CPU baseline
+2. Identify modules consuming >30% of total runtime
+3. For each hotspot module, classify the operator type:
+   - Dense matrix ops: cuBLAS/torch.matmul
+   - Sparse matrix ops: cuSPARSE/torch.sparse
+   - Per-element loops: vectorize with torch batch
+   - Graph propagation: torch.sparse_csr + batch
+   - Sorting/searching: evaluate carefully, often not worth GPU
+   - Control flow / branching: not GPU-friendly
+4. Pick the GPU strategy based on operator type
+5. Run benchmark at multiple scales to find crossover point
+
+# GPU strategy decision tree
+
+Hotspot is per-element loop?
+  -> Vectorize: F.cosine_similarity(unsqueeze, gather), torch.topk, torch.log-mean
+Hotspot is BLAS2/3 (matmul)?
+  -> cuBLAS via torch.mm / torch.mv (Python) or cuBLAS-linked R (R)
+Hotspot is sparse graph?
+  -> torch.sparse_csr + batched SpMV
+Hotspot is independent tasks?
+  -> Batch all tasks into one GPU call (multi-trait, multi-locus, multi-spot)
+
+# Cross-language pattern (R to Python)
+
+R-side wrapper:
+```r
+library(reticulate)
+use_python("/opt/conda/bin/python3")
+source_python("tools/toolname/src/toolname_gpu.py")
+
+gpu_result <- compute_gpu(X, y, params)
+```
+
+Python module exports a single function that R calls.
+Keep R for data loading, preprocessing, and statistical tests.
+GPU only for the compute-intensive inner loop.

@@ -1,7 +1,7 @@
 ---
 name: exhibit-demo-builder
 description: Build showcaseable demo platforms from enterprise project documentation (Chinese clients).
-version: 1.0.0
+version: 1.1.0
 metadata:
   hermes:
     tags: [exhibit, demo, chinese, docker, fastapi, react]
@@ -35,6 +35,18 @@ Build interactive demo platforms from enterprise project documentation for Chine
 | Backend | Python FastAPI + SQLAlchemy + SQLite |
 | Container | Single Docker image via supervisord (nginx + uvicorn) |
 
+## UI Theme (CRITICAL)
+
+**Enterprise blue-white, light theme — NOT dark theme.**
+```
+ConfigProvider theme={{ token: { colorPrimary: '#1677ff' } }}
+```
+- White backgrounds, blue (#1677ff) as primary accent
+- Ant Design default light theme (no darkAlgorithm)
+- Clean, professional, enterprise-grade look
+- Sidebar: #fafafa or white; Header: white with subtle border-bottom
+- User explicitly rejected dark theme — never use it
+
 ## Architecture
 
 ```
@@ -60,7 +72,7 @@ Build interactive demo platforms from enterprise project documentation for Chine
 │   ├── pages/                 ← Page components
 │   ├── components/            ← Reusable components
 │   ├── mock/data.ts           ← Keep for reference, but pages use api.ts
-│   └── theme.ts               ← Ant Design dark theme config
+│   └── theme.ts               ← Ant Design light enterprise blue-white theme
 ├── docker-compose.yml         ← Dev mode (two containers, NOT for client delivery)
 └── Dockerfile                 ← Frontend-only build (legacy, kept for dev)
 ```
@@ -102,7 +114,7 @@ After deciding the approach, define demo scope (4-6 pages: login, dashboard, lis
 
 ### Phase 3: Implement (delegate_task with terminal+file+web toolsets)
 1. Backend first: FastAPI + SQLite + seed data matching mock structures exactly
-2. Frontend: React + Vite + Ant Design dark theme + React Router
+2. Frontend: React + Vite + Ant Design light enterprise blue-white theme + React Router
 3. API service layer replacing hardcoded mock data
 4. Single-image Docker packaging: supervisord + nginx + uvicorn
 
@@ -110,8 +122,16 @@ After deciding the approach, define demo scope (4-6 pages: login, dashboard, lis
 1. Write 部署说明.md (Chinese, for non-technical users):
    - Prerequisites: Install Docker Desktop (with download links)
    - Step 1: docker load -i <image>.tar.gz
-   - Step 2: docker run -d -p 3000:80 -v <volume>:/app/data --name <name> <image>
+   - Step 2: docker run -d -p 3000:80 --name <name> <image>
    - Step 3: Open http://localhost:3000
+   - **CRITICAL: 演示账号表** — 列出所有预置用户的用户名、密码、角色、权限。让客户拿到就能登。格式：
+     ```
+     ## 演示账号
+     | 用户名 | 密码 | 角色 | 权限说明 |
+     |-------|------|------|---------|
+     | **admin** | admin123 | 管理员 | 全部权限 |
+     ```
+     不要写"密码任意"、"不校验密码"之类的话，显得不专业。
    - Stop/start/restart commands
    - Upgrade procedure
    - Backup procedure
@@ -134,7 +154,11 @@ After deciding the approach, define demo scope (4-6 pages: login, dashboard, lis
 3. **Internal docs stay internal** — docs/internal/ is never delivered.
 4. **Single image delivery** — merge frontend+backend into one container with supervisord.
 5. **Delegate complex implementation** — use delegate_task with terminal+file+web toolsets. Claude Code CLI may have auth issues with long prompts.
-6. **Pre-seed database** — SQLite with all mock data on first run, data persists in Docker volume.
+6. **Pre-seed database** — SQLite with all mock data on first run. Image is fully self-contained; NO volume mounts in deployment commands. Database lives inside the container.
+7. **Demo accounts in 部署说明** — every project with login MUST list all seeded usernames, passwords, roles, and permissions. 不要写"密码任意"、"不校验密码"之类的话，显得不专业。后端必须实际校验密码。
+8. **Docker image tag is English** — 镜像 tag 必须用英文（如 `knowledge-base-manager:latest`）。部署文档里的 `docker run xxx:latest` 必须用英文 tag，中文项目名只是目录名和 `.tar.gz` 文件名。
+9. **Login must send password** — 前端登录必须把 `password` 字段传给后端。LoginParams 接口必须包含 `password: string`。后端的 login 端点必须校验密码，不匹配返回 401。
+10. **Delivery folder structure** — 每个项目一个子目录，里面只有两个文件：`部署说明.md` + `<中文名>-镜像.tar.gz`。整体交付打包为 `delivery.tar.gz`。
 
 ## Pitfalls
 
@@ -143,3 +167,11 @@ After deciding the approach, define demo scope (4-6 pages: login, dashboard, lis
 - `docker-compose.yml` `version` attribute is deprecated in recent Docker, omit it
 - supervisord binary location varies: check `/usr/bin/supervisord` vs `/usr/local/bin/supervisord`
 - Container name conflicts: always `docker rm -f <name>` before re-creating
+- **tsconfig 常见错误**：
+  - `allowImportingTsExtensions` 必须搭配 `noEmit` 或 `emitDeclarationOnly`，否则 `tsc -b` 失败
+  - `composite: true` + `noEmit: true` 互斥，二选一
+  - 推荐方案：tsconfig.json 不设 references，直接 `include: ["src", "vite-env.d.ts"]`，build 用 `tsc --noEmit && vite build`
+  - `esModuleInterop: true` 避免 import 报错
+  - **演示文档禁忌**：部署说明.md 里绝对不能出现"密码任意"、"不校验密码"、"任意用户名可登录"等字样，客户看到会觉得是玩具。必须像正式系统一样列出用户名+密码。
+  - **Docker tag 必须英文**：`docker build -t <英文名>:latest`，`docker run <英文名>:latest`。中文项目名只用于目录名和 tar.gz 文件名，不在 Docker 命令中。
+  - **部署文档命令核实**：交付前必须 grep 所有部署文档确认 docker run 用的是英文 tag，`-v` 已删除。

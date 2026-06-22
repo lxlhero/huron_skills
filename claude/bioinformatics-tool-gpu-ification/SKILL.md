@@ -310,6 +310,59 @@ Do NOT use a "mirror CPU" implementation as the reference. The real CPU code
 (what users actually run) is the ONLY valid reference. The user said:
 "最终目标是在对齐gpu模块和原版的精度的情况下，提升速度"
 
+## E2E 验证铁律（5 条不可省略）
+
+"端到端验证"不等于跑通了就算。以下 5 条是 E2E 验证的最低标准，缺一不可：
+
+**1. 必须用真实 benchmark 数据**
+
+合成数据（`rnorm`、`np.random`、模拟矩阵）只允许用于 L1 smoke test（"代码不崩溃"）。
+E2E 精度验证必须用真实生物学数据（1000G VCF、UK Biobank、GTEx、课题组内部真实数据等），
+因为真实数据的 LD 结构、等位基因频率分布、缺失模式会暴露合成数据无法发现的数值问题（见 pitfall #62、#63）。
+
+> 禁止用模拟数据通过 E2E 然后宣称"GPU 版精度对齐"。
+
+**2. GPU kernel 必须内化到镜像中**
+
+E2E 测试必须使用已将 GPU kernel COPY 进镜像的 L2 image（如 `susier-gpu:v0.2`），
+不允许用 L1 base + GPFS 路径注入（`py_run_string` 或 `sys.path.insert`）代替。
+GPFS kernel 注入只用于调试迭代阶段；E2E 验证的目标是验证"交付物本身"可用。
+
+> 规则：看到 `py_run_string(... sys.path.insert ... GPFS ...)` 的 rjob，那是调试，不是 E2E。
+
+**3. 通过 bash 内联方式运行（rjob inline bash）**
+
+rjob 提交必须用 `bash -c '...'` 内联，所有步骤写进一个 bash -c 块，
+不依赖 GPFS 上的外部脚本文件（防止脚本漂移，见 pitfall #41）。
+格式：
+```
+rjob submit ... -- bash -c 'Rscript - <<'"'"'REOF'"'"'
+R 代码（路径硬编码，不用变量）
+REOF'
+```
+
+**4. 对比对象必须是原版工具**
+
+精度比较的 reference 必须是原版 CPU 工具（CRAN 包、官方 CLI、原始 Python 实现）——
+不允许用"自己写的 CPU mirror 版"作为参考（会隐藏算法理解错误，见 pitfall #18）。
+原版工具在同一个 rjob 里运行，结果实时对比。
+
+> 规则：`fit_cpu <- susieR::susie(X, y, ...)` 这种，而不是任何自写的 CPU 重现版。
+
+**5. 对比的是工具最终输出的精度**
+
+E2E 比较必须针对该工具对用户有意义的最终输出，而不是中间变量：
+
+| 工具 | 最终输出 | 精度指标 |
+|------|----------|----------|
+| susieR | PIP（Posterior Inclusion Probability）| Pearson r > 0.98；sigma2 ratio < 1.01 |
+| gsMap | Cauchy p-value / LDSC beta | Pearson r > 0.999 |
+| 通用原则 | 用户实际读取的分析结果 | 由工具特性决定，提前在计划阶段确认 |
+
+仅报告 fit 时间、内部 ELBO、中间矩阵的误差不构成 E2E 验证。
+
+---
+
 ## 4-layer pre-Docker integration testing (MANDATORY before image build)
 
 The user explicitly expects bugs to be caught BEFORE the Docker build/push/deploy cycle. The "find bug at E2E → fix → rebuild → push → re-run" loop is unacceptable. Do these 4 layers first:

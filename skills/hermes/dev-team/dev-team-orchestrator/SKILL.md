@@ -1,7 +1,7 @@
 ---
 name: dev-team-orchestrator
 description: "DevTeam master controller. Five commands: devteam build [需求文件|文件夹] (create from scratch, optional requirements doc), devteam debug (fix bugs), devteam add (add features), devteam deploy (build image and deploy), devteam sync (sync skills to repo). Coordinates 11 specialized agents. Auto-syncs skills to huron_skills repo."
-version: 2.1.0
+version: 2.2.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -12,9 +12,9 @@ metadata:
     role: architect
 ---
 
-# DevTeam Orchestrator v2.1
+# DevTeam Orchestrator v2.2
 
-DevTeam 总指挥。五个命令入口 + 需求文件输入 + 自动同步。
+DevTeam 总指挥。五个命令入口 + 需求文件/混合输入 + 自动同步。
 
 ## 命令入口
 
@@ -45,29 +45,41 @@ DevTeam 总指挥。五个命令入口 + 需求文件输入 + 自动同步。
 
 ## devteam build — 从零搭建项目
 
-触发: 用户说 "devteam build <描述>" [<需求文件|文件夹>] ["--dir <目录>"]
+trigger: 用户说 "devteam build <描述> [<需求文件|文件夹>] [--dir <目录>]"
+
+支持三种输入模式:
+| 模式 | 示例 | 说明 |
+|------|------|------|
+| 纯描述 | `devteam build 一个博客系统` | 只用自然语言描述需求 |
+| 纯文件/文件夹 | `devteam build ~/prd.md --dir ~/blog` | 只用需求文档 |
+| **混合输入** | `devteam build ~/prd.md 再加评论功能和暗黑模式 --dir ~/blog` | 需求文档 + 口头补充 |
 
 ### Phase 0: 开工
-1. 解析用户输入，提取：
-   - 项目描述（"一个博客系统"）
-   - 目标目录（"放在 ~/projects/blog"）
-   - **需求文件/文件夹路径**（"用 /path/to/requirements.md"）
+1. 解析用户输入，提取三要素：
+   - **需求文件/文件夹路径** — 识别绝对/相对路径、~/ 开头的路径
+   - **口头描述** — 文件中路径以外的人话部分（"一个博客"、"再加评论"等）
+   - **目标目录** — "--dir" 或 "放在" 后的路径
 2. 如果用户没指定目录，问用户
 3. `mkdir -p <path> && git init && mkdir -p specs backend frontend`
 
-### Phase 0.5: 读取需求（如果提供了需求文件/文件夹）
-**仅当用户指定了需求源时执行。**
+### Phase 0.5: 读取需求（如果有需求源）
+**有需求文件/文件夹时执行，与口头描述可并存。**
 
 1. 如果是文件路径 → read_file 读取全文
 2. 如果是文件夹路径 → search_files 列出所有文件，逐个 read_file 读取
 3. 支持格式：.md, .txt, .yaml, .json, .toml
-4. 将读取的内容保存为 `<project>/specs/requirements-source/` 副本（供后续参考）
-5. 提炼需求要点摘要，传给 Phase 1 PM
+4. 将读取的内容保存为 `<project>/specs/requirements-source/` 副本
+5. **合并策略：文件内容为主，口头描述为补充**
+   - 需求文件提供结构和主干功能
+   - 口头描述覆盖/追加/细化（"再加XX"=追加，"不要YY"=删除，"ZZ改成AA"=覆盖）
+   - 冲突时口头描述优先级更高
+6. 提炼合并后的需求要点摘要，传给 Phase 1 PM
 
 ### Phase 1: PM
 Load `dev-team-pm` → delegate_task，context 必须包含：
-- 用户原始描述
-- **需求文件关键内容**（如果有 Phase 0.5 产出）
+- **需求文件关键内容源**（如果有）
+- **用户口头描述**（如果有）
+- **合并提示**："需求文件提供主干，口头描述为增量/覆盖。冲突时以口头描述为准。"
 - 目标目录
 
 PM 产出 specs/feature.spec.md（EARS 格式需求规格书）
@@ -169,23 +181,32 @@ RELATED FILES: <Phase 0.5 需求文件路径列表>
 
 ## 需求文件格式
 
-支持的输入格式:
+支持的输入模式:
+
+### 纯描述
+```
+devteam build 一个博客系统，有注册登录和文章管理 --dir ~/projects/blog
+```
 
 ### 单文件
 ```
 devteam build ~/requirements/blog-v1.md --dir ~/projects/blog
 ```
-需求文件可以是:
-- Markdown 产品需求文档 (PRD)
-- 纯文本功能列表
-- YAML/JSON 结构化需求
-- TOML 配置文件
 
 ### 文件夹
 ```
 devteam build ~/requirements/blog/ --dir ~/projects/blog
 ```
-文件夹内应有多个 .md 文件，PM 会逐个读取分析。
+
+### **混合输入（文件/文件夹 + 描述）**
+```
+devteam build ~/requirements/blog-v1.md 再加评论功能和暗黑模式 --dir ~/projects/blog
+devteam build ~/requirements/blog/ 不要用户系统，只要文章CRUD --dir ~/projects/blog
+```
+混合模式规则:
+- 需求文件提供结构和主干功能
+- 口头描述做增量（"再加XX"）、删除（"不要YY"）、覆盖（"ZZ改成AA"）
+- 冲突时口头描述优先
 
 ### 需求文件模板示例
 ```markdown

@@ -26,9 +26,9 @@ devteam sync  同步 skills 到 huron_skills 仓库
 | `devteam deploy` | "devteam deploy", "部署", "打镜像" | 打 Docker 镜像并部署 |
 | `devteam sync` | "devteam sync", "同步skills" | 同步 ~/.hermes/skills/dev-team → huron_skills 推送 |
 
-## 新特性：需求文档驱动
+## 新特性：需求文档驱动 + 混合输入
 
-**v2.1** 支持直接传入需求文件或文件夹，DevTeam 自动读取分析：
+**v2.2** 支持四种输入模式：纯描述、纯文件、纯文件夹、**文件+描述混合**。
 
 ### 单文件模式
 ```
@@ -42,8 +42,15 @@ devteam build ~/requirements/my-app/ --dir ~/projects/my-app
 ```
 文件夹内多个 .md 文件逐个分析，自动合并需求。
 
+### **混合输入模式（v2.2 新增）**
+```
+devteam build ~/requirements/blog-prd.md 再加评论功能和暗黑模式 --dir ~/projects/blog
+devteam build ~/requirements/ 不要用户系统，只要文章CRUD --dir ~/projects/blog
+```
+文件提供主干结构，口头描述做增量/删除/覆盖。冲突时口头描述优先。
+
 ### PM 自动处理
-Phase 0.5 先读取需求源 → Phase 1 PM 生成 EARS 格式正式规格书 → 正常流程继续。
+Phase 0.5 先读取需求源 + 合并口头描述 → Phase 1 PM 生成 EARS 格式正式规格书 → 正常流程继续。
 
 ### 需求模板
 ```markdown
@@ -162,6 +169,7 @@ Agent 专业知识来源于 `/Users/huron/code/ai_lab/claude-skills/skills/` 下
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v2.2 | 2026-06-22 | 新增混合输入模式（文件+描述并存），需求文件为主、口头描述增量/覆盖 |
 | v2.1 | 2026-06-22 | 新增需求文件/文件夹输入支持、devteam sync 命令、Phase 10 自动同步 |
 | v2.0 | 2026-06-22 | 新增 deploy agent，orchestrator 支持 build/debug/add/deploy 四个命令 |
 | v1.0 | 2026-06-22 | 初始版本，10 agent + orchestrator |

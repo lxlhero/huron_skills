@@ -1,161 +1,135 @@
 ---
 name: dev-team-orchestrator
-description: One-command fullstack development team. Takes a one-sentence feature description and orchestrates a multi-agent team (PM, Architect, Backend, Frontend, Tester, Reviewer, Logging, DevOps) to build a complete production-ready application. Use when the user says "build me X" or wants a fullstack app built from scratch with one command.
-version: 1.0.0
+description: "DevTeam master controller. Four commands: devteam build (create from scratch), devteam debug (fix bugs), devteam add (add features), devteam deploy (build image and deploy). Coordinates 11 specialized agents."
+version: 2.0.0
 author: Hermes Agent
 license: MIT
 metadata:
   hermes:
-    tags: [orchestrator, multi-agent, dev-team, fullstack, one-command]
-    related_skills: [dev-team-pm, dev-team-architect, dev-team-backend, dev-team-frontend, dev-team-tester, dev-team-reviewer, dev-team-logging, dev-team-debugger, dev-team-devops]
+    tags: [orchestrator, multi-agent, devteam, build, debug, add, deploy]
+    related_skills: [dev-team-pm, dev-team-architect, dev-team-backend, dev-team-frontend, dev-team-tester, dev-team-reviewer, dev-team-logging, dev-team-debugger, dev-team-devops, dev-team-deploy]
     domain: workflow
     role: architect
 ---
 
-# DevTeam Orchestrator
+# DevTeam Orchestrator v2.0
 
-ONE SENTENCE → PRODUCTION APP. You are the DevTeam lead coordinating a multi-agent development team.
+DevTeam 总指挥。四个命令入口，11 个专业 Agent。
 
-## Team Roster
+## 命令入口
 
-| Agent | Skill | Role |
-|-------|-------|------|
-| PM | dev-team-pm | Requirements, user stories, acceptance criteria |
-| Architect | dev-team-architect | System design, ADRs, tech stack |
-| Backend | dev-team-backend | FastAPI, Pydantic, SQLAlchemy, JWT |
-| Frontend | dev-team-frontend | React/Vue, TypeScript, UI components |
-| Tester | dev-team-tester | Unit, integration, E2E tests |
-| Reviewer | dev-team-reviewer | Code review, security audit |
-| Logging | dev-team-logging | Structured logging, metrics, alerts |
-| Debugger | dev-team-debugger | Bug fixing, root cause analysis |
-| DevOps | dev-team-devops | Docker, CI/CD, deployment |
+| 命令 | 触发词 | 用途 |
+|------|--------|------|
+| `devteam build` | "devteam build", "build me", "创建", "搭建" | 从零搭建新项目 |
+| `devteam add` | "devteam add", "add feature", "加功能", "新增" | 给已有项目加功能 |
+| `devteam debug` | "devteam debug", "debug", "修bug", "报错", "定位" | 定位修复 bug |
+| `devteam deploy` | "devteam deploy", "deploy", "部署", "打镜像" | 打镜像部署服务 |
 
-## The Workflow
+## DevTeam Agent 名单 (11人)
 
-### Phase 0: Setup
-1. Ask user: "What do you want to build?" (one sentence is enough)
-2. Ask user: "Where should I create the project?" (provide a path)
-3. Create project directory and initialize: `git init`, basic structure
-4. Load dev-team-pm skill
+| Agent | 职责 |
+|-------|------|
+| PM | 需求澄清，规格说明书 |
+| Architect | 系统设计，架构图，技术选型 |
+| Backend | FastAPI/Python API 开发 |
+| Frontend | React/Vue 前端开发 |
+| Tester | 测试编写+执行 |
+| Reviewer | 代码审查+安全检查 |
+| Logging | 结构化日志+监控 |
+| Debugger | 根因分析+修复 |
+| DevOps | Dockerfile+CI/CD 配置 |
+| Deploy | 打镜像+推送+部署 |
 
-### Phase 1: Requirements (PM Agent)
-Dispatch via delegate_task:
+---
+
+## devteam build — 从零搭建项目
+
+触发: 用户说 "devteam build <描述>" 或 "build me <描述>"
+
+### Phase 0: 开工
+1. 问用户：放哪个目录？
+2. `mkdir -p <path> && git init && mkdir -p specs backend frontend`
+
+### Phase 1: PM
+Load `dev-team-pm` → 澄清需求 → 写 specs/feature.spec.md
+
+### Phase 2: Architect
+Load `dev-team-architect` → 系统设计 → specs/architecture.md
+
+### Phase 3: Plan
+Load `writing-plans` → 拆成 bite-sized 任务
+
+### Phase 4: 实现
+按任务 dispatch:
+- Backend → `delegate_task` + dev-team-backend context
+- Frontend → `delegate_task` + dev-team-frontend context
+不同文件的 Backend/Frontend 可并行
+
+### Phase 5: Test
+Load `dev-team-tester` → delegate_task
+
+### Phase 6: Review
+Load `dev-team-reviewer` → delegate_task
+Critical issues → 回 Phase 4 → 重新 Review
+
+### Phase 7: Logging
+Load `dev-team-logging` → delegate_task
+
+### Phase 8: DevOps
+Load `dev-team-devops` → delegate_task
+
+### Phase 9: 验证
+pytest -v + curl /api/health + git commit
+
+---
+
+## devteam add — 增量加功能
+
+触发: "devteam add <功能>" 或 "给我加个 <功能>"
+
+1. 确认项目路径 + 要加的功能
+2. Load `dev-team-pm` → 澄清增量需求
+3. Load `writing-plans` → 拆解增量任务
+4. dispatch Backend/Frontend 逐个实现
+5. Test → Review → git commit
+
+---
+
+## devteam debug — 定位修bug
+
+触发: "devteam debug <bug>" 或 "帮我看看这个报错"
+
+1. 确认项目路径 + bug 描述/报错
+2. Load `dev-team-debugger` → dispatch:
+   Reproduce → Isolate → Hypothesize → Fix → Prevent
+3. Test → Review → git commit
+
+---
+
+## devteam deploy — 打镜像部署
+
+触发: "devteam deploy" 或 "部署" 或 "打镜像"
+
+1. 确认项目路径
+2. Load `dev-team-deploy` → dispatch:
+   Build → Test locally → Push → Deploy → Verify
+
+---
+
+## 调度规范
+
+每次 `delegate_task` 必须包含:
 ```
-goal: "Define feature specification for: {user's description}"
-context: Include user's original requirement + project path
-toolsets: ['file']
-```
-After PM returns: save spec to specs/feature.spec.md
-
-### Phase 2: Architecture (Architect Agent)
-Load dev-team-architect skill first, then dispatch:
-```
-goal: "Design system architecture for: {PM's spec}"
-context: Include PM spec summary + project path + preferred tech stack
-toolsets: ['file']
-```
-After Architect returns: save design to specs/architecture.md
-
-### Phase 3: Implementation Plan
-Load writing-plans skill. Create bite-sized tasks from the architecture.
-Save to specs/implementation-plan.md
-Create todo list with all tasks.
-
-### Phase 4: Implementation (Backend + Frontend)
-For EACH task in the plan:
-- Load the relevant agent skill (dev-team-backend or dev-team-frontend)
-- Dispatch via delegate_task with:
-  - goal: specific task description
-  - context: project path, tech stack, relevant spec/architecture excerpts
-  - toolsets: ['terminal', 'file']
-- After each task completes, mark it done in todo
-
-**Parallelism rule:** Backend and Frontend tasks that don't touch the same files CAN run in parallel.
-
-### Phase 5: Testing (Tester Agent)
-After ALL implementation tasks complete:
-Load dev-team-tester skill, then dispatch:
-```
-goal: "Write and run tests for the complete application at {project_path}"
-context: Implementation summary, endpoints list, component list
-toolsets: ['terminal', 'file']
+PROJECT PATH: /absolute/path
+TECH STACK: <backend + frontend + db>
+TASK: <具体任务>
+CONSTRAINTS: <特殊要求>
 ```
 
-### Phase 6: Review (Reviewer Agent)
-Load dev-team-reviewer skill, then dispatch:
-```
-goal: "Review the complete application at {project_path} for bugs, security, and quality"
-context: Implementation summary, file list
-toolsets: ['terminal', 'file']
-```
-If critical issues found: dispatch Backend/Frontend agents to fix, then re-review.
-
-### Phase 7: Observability (Logging Agent)
-Load dev-team-logging skill, then dispatch:
-```
-goal: "Add structured logging, metrics, and health checks to {project_path}"
-context: Endpoints list, tech stack
-toolsets: ['terminal', 'file']
-```
-
-### Phase 8: Deployment (DevOps Agent)
-Load dev-team-devops skill, then dispatch:
-```
-goal: "Create Dockerfile, docker-compose, and CI/CD for {project_path}"
-context: Tech stack, port numbers, service dependencies
-toolsets: ['terminal', 'file']
-```
-
-### Phase 9: Final Verification
-1. Run all tests: pytest -v / npx vitest
-2. Run linting: ruff check / eslint
-3. Verify app starts: docker-compose up --build -d && curl /health
-4. Summarize everything built
-
-## Dispatch Context Template
-
-For every delegate_task call, include:
-```
-PROJECT PATH: {path}
-TECH STACK: {backend: FastAPI+Python, frontend: React+TypeScript, DB: SQLite/PostgreSQL}
-ARCHITECTURE: {brief summary from Phase 2}
-TASK: {specific task from plan}
-CONSTRAINTS: {any special rules from the user}
-```
-
-## Rules
-
-### MUST DO
-- Create project directory FIRST, before dispatching any agent
-- Load the relevant agent skill BEFORE dispatching (to get the full instructions)
-- Include complete context in every delegate_task (subagents have no memory)
-- Verify each agent's output before marking tasks complete
-- Run tests after Phase 4 and Phase 5
-- Save all specs to specs/ directory
-- Commit after each phase: git add -A && git commit -m "phase N: description"
-
-### MUST NOT DO
-- Skip any phase (unless user explicitly says so)
-- Proceed to next phase with unresolved critical issues
-- Dispatch agents that touch same files in parallel
-- Assume subagents know the project structure (always include it in context)
-
-## Quick Start Example
-
-User: "Build me a task management app"
-You:
-1. Ask: "Where should I create the project?"
-2. User: "~/projects/task-manager"
-3. You begin Phase 0 → Phase 1 → ... → Phase 9
-4. Result: complete app at ~/projects/task-manager with backend, frontend, tests, docker
-
-## One-Shot: Lightweight Mode
-
-For simple CRUD apps, use "lightweight mode":
-- Skip formal PM + Architect phases (use embedded defaults)
-- Combine Backend + Frontend into fewer agents
-- Skip DevOps phase (just docker-compose)
-- Still run Test + Review
-
-User says: "quick build me X" → use lightweight mode.
-User says: "build me X" → use full mode.
+## 铁律
+- 先建目录再派 Agent
+- Load agent skill BEFORE dispatch
+- delegate_task context 必须完整（子 Agent 无记忆）
+- 每 phase git commit
+- Critical issue 不解决不进下一 phase
+- 不同文件的 Agent 可并行，同文件必须串行

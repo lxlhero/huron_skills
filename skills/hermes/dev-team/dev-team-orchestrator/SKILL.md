@@ -202,6 +202,7 @@ devteam build ~/requirements/blog/ --dir ~/projects/blog
 ```
 devteam build ~/requirements/blog-v1.md 再加评论功能和暗黑模式 --dir ~/projects/blog
 devteam build ~/requirements/blog/ 不要用户系统，只要文章CRUD --dir ~/projects/blog
+devteam build ~/requirements/blog-prd.md 我需要ui明快漂亮一点 --dir ~/projects/blog
 ```
 混合模式规则:
 - 需求文件提供结构和主干功能

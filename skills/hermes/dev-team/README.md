@@ -44,6 +44,7 @@ devteam build ~/requirements/my-app/ --dir ~/projects/my-app
 
 ### **混合输入模式（v2.2 新增）**
 ```
+devteam build ~/requirements/blog-prd.md 我需要ui明快漂亮一点 --dir ~/projects/blog
 devteam build ~/requirements/blog-prd.md 再加评论功能和暗黑模式 --dir ~/projects/blog
 devteam build ~/requirements/ 不要用户系统，只要文章CRUD --dir ~/projects/blog
 ```

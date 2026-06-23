@@ -17,16 +17,17 @@ devteam expose 暴露到公网，让我手机上能访问
 devteam sync  同步 skills 到 huron_skills 仓库
 ```
 
-## 六大命令
+## 七大命令
 
 | 命令 | 触发词 | 用途 |
 |------|--------|------|
 | `devteam build [需求文件\|文件夹]` | "devteam build", "build me", "创建", "搭建" | 从零搭建新项目，可选传入需求文档 |
 | `devteam add` | "devteam add", "加功能", "新增" | 给已有项目增量加功能 |
+| `devteam optimize` | "devteam optimize", "优化", "改进", "增加日志", "加测试", "优化UI" | 对已有项目做专项优化（UI/日志/测试/性能/安全/文档） |
 | `devteam debug` | "devteam debug", "修bug", "报错", "定位" | 定位并修复 bug |
 | `devteam deploy` | "devteam deploy", "部署", "打镜像" | 打 Docker 镜像并部署 |
 | `devteam expose` | "devteam expose", "暴露", "公网访问" | 对外暴露服务（仅用户明确要求） |
-| `devteam sync` | "devteam sync", "同步skills" | 同步 ~/.hermes/skills/dev-team → huron_skills 推送 |
+| `devteam sync` | "devteam sync", "同步skills" | 同步 skills 到 huron_skills 推送 |
 
 ## 新特性：需求文档驱动 + 混合输入
 
@@ -155,6 +156,7 @@ Phase 11  同步           → devteam sync（自动推送到 huron_skills）
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| v3.1 | 2026-06-22 | 新增 `devteam optimize` 命令，6 个优化方向（UI/日志/测试/性能/安全/文档），现状审计→计划→执行→验证 |
 | v3.0 | 2026-06-22 | 拆分 tester→test-writer+test-runner；新增 database、ui、log-tracker、deploy-expose 四个 agent；Pipeline 从 11 步扩展为 12 步 |
 | v2.2 | 2026-06-22 | 新增混合输入模式（文件+描述并存），需求文件为主、口头描述增量/覆盖 |
 | v2.1 | 2026-06-22 | 新增需求文件/文件夹输入支持、devteam sync 命令、Phase 10 自动同步 |

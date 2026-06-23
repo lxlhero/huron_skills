@@ -201,8 +201,8 @@ Load `dev-team-log-tracker` → delegate_task
    - 日志: 检查日志输出 + 健康检查
    - 测试: Test-Runner 重跑 → 覆盖率对比（优化前 vs 优化后）
    - 性能: 前后 benchmark 对比
-6. **Review → git commit**
-7. 自动执行 `devteam sync`
+6. **Review → git commit**（不自动 push，等用户确认）
+7. **不自动执行 sync** — optimize 的改动留在本地，等用户确认后手动 `devteam sync`
 
 ### 常见用法
 

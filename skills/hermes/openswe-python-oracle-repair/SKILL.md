@@ -16,7 +16,7 @@ Use this associated child skill when a Python OpenSWE candidate set or delivery 
 
 ## References
 
-Before generation, validation, orchestration, or harvest, read the references shipped with this skill:
+The reference docs for this skill are kept only in the parent skill `openswe-runtime-builder` (single source of truth — no duplicated copies). Load that skill and read from its tree:
 
 - `references/python-static-oracle-production.md`
 - `references/python-bundle-local-delivery.md`

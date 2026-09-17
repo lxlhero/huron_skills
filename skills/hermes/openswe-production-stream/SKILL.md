@@ -16,7 +16,7 @@ Use this associated child skill when the user asks to continue or inspect an exi
 
 ## References
 
-For stage diagnosis and repair rules, read the references shipped with this skill:
+The reference docs for this skill are kept only in the parent skill `openswe-runtime-builder` (single source of truth — no duplicated copies). Load that skill and read from its tree:
 
 - `references/pipeline_stages.md`
 - `references/openswe_pipeline.md`

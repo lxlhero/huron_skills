@@ -28,11 +28,16 @@ production_integrity_gate.py
 production_supervision.py
 production_throughput_audit.py
 publish_production_scripts.py
+streaming_pool_reconciler.py
 verifier_quality_gate.py
 ```
 
-The release passed 74 regressions from the staging bytes and again from the
-installed formal bytes. `publish_production_scripts.py` requires an expected-SHA
+The core release passed 74 regressions from the staging bytes and again from the
+installed formal bytes. The subsequent `streaming-pool-20260929-v1` release
+added the pool reconciler at SHA256
+`155854de88fd1694f971e202cef110ce785ea5cfd13e4b6b7683dbdd7d86c4d4`;
+the combined staging suite passed 78 tests and the formal pool script passed its
+four focused tests. `publish_production_scripts.py` requires an expected-SHA
 manifest, takes `.deploy.lock`, saves every prior file in a unique `.history`
 directory, writes same-filesystem temporary files, uses `os.replace`, and rolls
 back installed files after an exception. A dry-run validates only; it is not a
@@ -165,6 +170,43 @@ hard-coded requirement:
 This batch separately requires 10 no-mount self-contained image builds with
 RED/GREEN. They may be sampled across the frozen cohort and do not dictate the
 first wave size.
+
+### Streaming subagent pool
+
+Ten active subagents is a controller invariant whenever at least ten runnable
+tasks exist. It is not a batch size and it does not create a barrier. The main
+agent continuously performs `observe -> reap -> advance -> refill`; task agents
+work on concrete IDs and never wait on builds just to occupy slots.
+
+Write an actual delegate/queue snapshot, then run:
+
+```bash
+python3 <installed-skill>/scripts/streaming_pool_reconciler.py \
+  --snapshot <cycle-snapshot.json> --output <cycle-plan.json> \
+  --target-active 10
+```
+
+The snapshot has `agents`, `runnable`, and optional `frozen_lanes`. Agent status
+is `starting|running|completed|failed|exited`. Terminal rows carry
+`artifact_paths`; failed/exited rows may be retried only with both
+`retry_authorized=true` and a non-empty `next_hypothesis`. The plan reaps all
+terminal rows, advances completed artifacts immediately, and fills open slots
+from retries/healthy runnable lanes. Duplicate active task assignments and
+unknown statuses fail closed.
+
+Controller rules:
+
+- Reconcile after every tool cycle and before/after processing each agent event.
+- An agent disappearing without a reply is still a terminal event; inspect its
+  external artifact directory and log before replacement.
+- Preserve the same frozen cohort ID. A replacement subagent inherits work; it
+  does not replace the failed SWE with a different denominator member.
+- A repeated common failure freezes only the affected lane. Refill from other
+  repo/stage lanes and escalate the shared script to Codex.
+- Provider 429, timeout, or max-iteration exit does not consume a SWE behavior
+  attempt. Record it separately, inherit usable artifacts, and refill.
+- Never wait for all agents launched together. Artifact readiness, not launch
+  group membership, triggers downstream work.
 
 For all 150, RED/GREEN execution coverage is 100%; every accepted item has a
 semantic review artifact; Codex independently model-audits at least 35% of the

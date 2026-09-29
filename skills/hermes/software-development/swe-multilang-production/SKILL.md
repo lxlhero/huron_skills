@@ -10,7 +10,7 @@ metadata:
 ## 2026-09-29 audited chain (takes precedence)
 
 This section supersedes older target counts, automatic-accept language, ad-hoc
-ledger handling, and unconditional worker-floor rules later in this file. The
+ledger handling, and batch-barrier controller behavior later in this file. The
 current supervised cohort is **150 fixed IDs**. `10 -> 40 -> 150` is a
 risk-aware default rollout example, not a fixed production invariant. Choose
 wave sizes from the current user request, resource capacity, and observed
@@ -74,6 +74,34 @@ states do not count. Report stage queues and event-based 15/60-minute rates, but
 prefer deterministic workers and repo-affinity microbatches over model agents
 waiting on builds. Read [references/production-v2.md](references/production-v2.md)
 for exact commands, transaction recovery, wave gates, and current release proof.
+
+## Streaming subagent controller (mandatory)
+
+The main Hermes agent is a controller, not a per-ID worker. While at least ten
+runnable IDs exist, keep **10 active task subagents**. Never wait for the whole
+set to finish. After every delegate-list result, agent completion/exit, tool
+cycle, or new ready artifact, reconcile the pool in the same control cycle:
+
+1. Reap every terminal agent and inventory its artifact paths, logs, current
+   hypothesis, and exit reason.
+2. Advance completed artifacts immediately to their next stage; do not wait for
+   the other agents in the launch group.
+3. For failed/exited work, hand artifacts to a successor only when a new,
+   recorded hypothesis authorizes retry. Provider errors and agent timeouts are
+   controller failures, not SWE failures.
+4. Dispatch enough runnable work to restore 10 active agents immediately.
+5. If a common script/environment fingerprint repeats, freeze that lane, notify
+   Codex, and refill from healthy lanes. Do not send ten agents into the same
+   known defect.
+
+Generate each cycle's action plan with
+`scripts/streaming_pool_reconciler.py`. Its snapshot is derived from the actual
+delegate list and external queue/artifact state, never from expected replies.
+Execute `reap`, `advance_immediately`, and `dispatch_immediately` before doing
+long controller analysis. A nonzero `unfilled_slots` requires an explicit reason
+and immediate backlog/circuit-breaker diagnosis. The acceptance probe is three
+agents exiting from a ten-agent pool: their artifacts must be collected, one
+completed item advanced, and three replacements planned in that same cycle.
 
 ## 流式产出原则（信号驱动，强制）
 主 agent 不等 subagent 回执批处理。监控信号 = 服务器侧工件落盘状态：

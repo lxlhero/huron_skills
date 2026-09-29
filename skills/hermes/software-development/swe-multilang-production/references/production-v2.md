@@ -149,7 +149,8 @@ filesystem arrival do not.
 
 Resume Hermes session `20260918_111501_0ddc6d`. Freeze exactly 150 previously
 undelivered IDs and record their ordered IDs plus source snapshot hash before
-dispatch. Q57, Q50, and R10 are excluded. Wave sizes are selected per the
+dispatch. Q57, Q50, and R10 are skippable audit work-item labels, not SWE IDs;
+do not use them as a candidate exclusion rule. Wave sizes are selected per the
 current request and observed risk. The following is a default playbook, not a
 hard-coded requirement:
 

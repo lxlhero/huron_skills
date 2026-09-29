@@ -62,7 +62,9 @@ sample proving that self-contained images can be built and run RED/GREEN with
 no host dependency mounts; the sample is an audit obligation, not a mandatory
 first production wave. `runtime_manifest.json`, runner, source, environment, patches, and image
 identity must agree; missing or producer-host dependencies stop expansion.
-Q57, Q50, and R10 remain excluded from this supervised cohort.
+Q57, Q50, and R10 are audit work-item labels that the user allowed to remain
+open; they do not block launch and must not be interpreted as candidate IDs or
+as a cohort-selection filter.
 
 Freeze the denominator before work starts. Failures, pending items, and infra
 failures remain in it; never swap IDs to improve yield. Official throughput is

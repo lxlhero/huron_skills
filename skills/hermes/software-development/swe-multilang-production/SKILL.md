@@ -13,7 +13,8 @@ metadata:
 2. **队列 ready**（batch.json status=ready_for_independent_review）→ 立即派 reviewer
 3. **review PASS 落盘**（final_reviews/<ID>.json verdict=PASS）→ 立即 harvest
 4. **subagent 退出**（任何原因含 429/timeout/max_iterations）→ **必须立即查盘收遗产+同秒补位维持池子满转（目标 12-15 单元）——用户多次强调的硬性原则，不允许等回执或等批次**。实操：delegate_task(action='list') 清点存活数，低于目标立即补位；退出单元工件（材料/脚本/bundle）用 monitor 扫描归账。
-监控工具：/tmp/stream_monitor.py（A 待投/B 待审/C 待 harvest 三清单）+ /tmp/stream_inject.py（材料→rehearsal→投队列自动化）。注意 materials_v4 下有 .tmp 文件需 isdir 过滤；subagent 并发 >13 易触发 requests 级 429，补位小步走。交付计数以 delivery/bundles/<lang>/ 目录数为准（全语言总目录数=各语言之和）。
+监控工具：材料→rehearsal→投队列自动化脚本统一维护在中央 `/data/huron/swe/swe_dir/scripts/`（勿依赖 /tmp 临时物；历史 /tmp/stream_monitor.py、/tmp/stream_inject.py 已废除）。注意 materials_v4 下有 .tmp 文件需 isdir 过滤；subagent 并发 >13 易触发 requests 级 429，补位小步走。
+**交付计数（C6 硬 gate，2026-09-29）**：正式计数只接受 `^stepfun_[0-9]+$` 一级目录；language dirs、accepted IDs、accepted manifest、active catalog 四集合必须相等；delivery 语言目录禁止混入 cache/deps/log/temp 等非 SWE 目录（如 python/20260918_pillow_deps 属 delivery-root 污染，计数程序必须 fail-closed 而非裸 ls|wc）。禁止将 provider overload/基础设施失败计为 SWE attempt。
 5. **主动轮询非被动等待**：subagent 中途退出不产生 ASYNC 消息——不能等消息驱动。主 agent 每个 terminal/工具调用周期附带 delegate_task(action='list') 清点存活数。回执消息只是额外信号，不是唯一信号。
 6. **硬性下限（用户规定 2026-09-28）**：subagent 存活数**永不低于 10**。任何时点 list 清点 <10 → 立即派新单元补齐，无需权衡。检查节奏：每个工具周期+每次回执处理前后。
 7. **外部化 watchdog（已部署 2026-09-28）**：cron job `swe-pipeline-watchdog`（job_id 3d9db90e68fd，每 10 分钟，no_agent 脚本 ~/.hermes/scripts/swe_pipeline_watchdog.sh）自动扫描：待审积压>5/PASS 未 harvest>3/交付总数 3 周期停滞 → 报警注入会话。脚本报警即视为行动令：立即补对应单元。**该机制解决主 agent 长修复期间信号面盲区——报警就是行动令，不是信息**。⚠gateway 未运行则 cron 不 fire——会话开始时 cronjob_manage list 验证 job 存活。

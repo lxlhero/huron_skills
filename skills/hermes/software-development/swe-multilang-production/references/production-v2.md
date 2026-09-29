@@ -1,5 +1,178 @@
 # Production v2 runtime
 
+## Audited production-v3 control plane (2026-09-29)
+
+This section is authoritative when it conflicts with historical v2 notes below.
+The reusable control plane is installed directly under:
+
+```text
+/data/huron/swe/swe_dir/scripts/
+```
+
+Published release: `audit-fix-20260929-v1`. Its hash-pinned manifest was
+validated as SHA256
+`e0a17cb6d60df44b54d6283142e5938b6528e6535e6dac11e6e7feb8ebcb2771`.
+The release receipt and history are under
+`scripts/.history/audit-fix-20260929-v1/`; do not infer a release from an
+unversioned staging file.
+
+Maintained files:
+
+```text
+bootstrap_delivery_state.py
+counterfactual_gate.py
+delivery_count_gate.py
+harvest_oracle_repair_staging.py
+ledger_event_log.py
+production_integrity_gate.py
+production_supervision.py
+production_throughput_audit.py
+publish_production_scripts.py
+verifier_quality_gate.py
+```
+
+The release passed 74 regressions from the staging bytes and again from the
+installed formal bytes. `publish_production_scripts.py` requires an expected-SHA
+manifest, takes `.deploy.lock`, saves every prior file in a unique `.history`
+directory, writes same-filesystem temporary files, uses `os.replace`, and rolls
+back installed files after an exception. A dry-run validates only; it is not a
+deployment receipt.
+
+### Start and recovery preflight
+
+```bash
+D=/data/huron/swe/work_20260918/delivery
+A=<new-process-artifact-directory>
+
+python3 /data/huron/swe/swe_dir/scripts/production_integrity_gate.py \
+  --production-root "$D" --output-json "$A/integrity.json"
+
+python3 /data/huron/swe/swe_dir/scripts/production_supervision.py preflight \
+  --delivery-root "$D" --output "$A/preflight.json"
+```
+
+Both commands must exit zero and report `ok=true`. They reconcile exact sets,
+not counts alone. Any incomplete transaction, illegal bundle directory,
+language mismatch, missing/tampered evidence, stale derived view, or replay
+disagreement freezes all mutation.
+
+On startup, inspect `.state_transactions/*/journal.json`. Recovery is handled by
+`ledger_event_log.recover_incomplete_transactions()` under the state lock:
+before durable evidence/event, restore the `before` views and bundle locations;
+after evidence or event is durable, finish forward without duplicating events.
+Never delete a journal, rewrite history, or invent a catalog to make checks pass.
+
+Legacy delivery bootstrap is a one-time migration only:
+
+```bash
+python3 /data/huron/swe/swe_dir/scripts/bootstrap_delivery_state.py \
+  --production-root "$D" --reason '<reason>'
+# Inspect the dry-run result, then:
+python3 /data/huron/swe/swe_dir/scripts/bootstrap_delivery_state.py \
+  --production-root "$D" --reason '<same reason>' --apply
+```
+
+Bootstrap events establish prior accepted state and never count as new delivery
+velocity. If the event log already exists, do not bootstrap a second history.
+
+### Verifier admission
+
+`verifier_quality_gate.py` binds the review to all bundle-owned `.py`/shell
+verifier scripts outside source/runtime directories, including second-level
+helpers. It recognizes `/bundle/...` paths, root-level `test_*.py`, and simple
+data flow from source-file reads into later assertions. Source/gold oracles are
+hard rejects; all remaining candidates require model semantic review.
+
+Semantic review is not keyword classification. Trace the executed call path from
+the public issue entrypoint to the assertion and ask whether an intentionally
+wrong implementation would pass. Two known failure patterns are mandatory
+regressions:
+
+- `stepfun_1195343`: checking only `identify_payload` booleans misses public
+  receive parsing and the complete private-JSON receive path.
+- `stepfun_37834`: directly calling an auth mixin admits a global unsigned-auth
+  bypass because it never exercises Cognito `GetId` or a protected unsigned
+  negative control.
+
+For every high-risk suspect, store two executed arms under the candidate bundle:
+
+```text
+validation/counterfactual/
+  non_fix.patch
+  non_fix.log
+  non_fix.proof.json
+  equivalent_fix.patch
+  equivalent_fix.log
+  equivalent_fix.proof.json
+```
+
+`counterfactual_gate.py` requires real files and hashes, one execution marker and
+one exit marker per log, identical canonical command/image across arms, distinct
+patches, nonzero non-fix, and zero equivalent-fix. The semantic review references
+these bundle-local artifacts; it may not choose an external artifact root.
+
+### Promotion, quarantine, and counting
+
+Run validation and semantic review in staging. Formal promotion uses
+`harvest_oracle_repair_staging.py` with explicit canonical `--language`; the
+legacy unpartitioned mutating path is disabled. The harvester must call the
+activation transaction so bundle ownership, all active views, and activation
+events commit or recover together.
+
+To remove an invalid accepted SWE, write a model-readable audit artifact inside
+the delivery, hash it, then call `ledger_event_log.quarantine()` with the
+delivery-relative path and SHA. The transaction moves the bundle under
+`quarantine/<language>/<id>`, removes the ID from every active view, appends
+tombstone evidence, and appends a bound tombstone event. Never delete a bundle or
+edit five ledgers by hand. Reactivation requires a newly prepared bundle and the
+normal activation transaction; `reactivate()` intentionally fails.
+
+Official count:
+
+```bash
+python3 /data/huron/swe/swe_dir/scripts/delivery_count_gate.py \
+  --delivery-root "$D" --report "$A/count.json" --json
+```
+
+The wrapper emits `total=null` on any integrity failure. Throughput:
+
+```bash
+python3 /data/huron/swe/swe_dir/scripts/production_throughput_audit.py \
+  --queue-root <frozen-cohort-queue-root> --delivery-root "$D" \
+  --window-hours 48 --output "$A/throughput.json"
+```
+
+Only committed activation event timestamps count. Bootstrap, bundle mtimes, and
+filesystem arrival do not.
+
+### Supervised 150-ID expansion
+
+Resume Hermes session `20260918_111501_0ddc6d`. Freeze exactly 150 previously
+undelivered IDs and record their ordered IDs plus source snapshot hash before
+dispatch. Q57, Q50, and R10 are excluded. Wave sizes are selected per the
+current request and observed risk. The following is a default playbook, not a
+hard-coded requirement:
+
+1. Use a small canary when scripts, runtime manifests, repositories, or
+   environments are new or recently repaired.
+2. Increase the next wave only after the chosen canary report is accepted; a
+   shared defect freezes the affected lane regardless of wave number.
+3. Continue to the frozen 150 when evidence supports it. Keep one ledger writer.
+   Repo-affinity microbatches may build concurrently, but promotion is serialized
+   through the official transaction.
+
+This batch separately requires 10 no-mount self-contained image builds with
+RED/GREEN. They may be sampled across the frozen cohort and do not dictate the
+first wave size.
+
+For all 150, RED/GREEN execution coverage is 100%; every accepted item has a
+semantic review artifact; Codex independently model-audits at least 35% of the
+cohort. Do not replace failed or pending IDs. Every 15 minutes report queue depth
+per stage, completed/failed/pending within the frozen denominator, committed
+activation rates for 15/60 minutes, p50/p95 stage time, and classified failure
+counts. Provider overload and setup failure are operational failures, not SWE RED
+or accepted throughput.
+
 Server: `root@180.184.86.2`, SSH port `35120`; credentials supplied at runtime.
 Kit: `/data/huron/swe/swe_dir/scripts/python_pipeline_v2/`.
 Work root: `/data/huron/swe/work_20260923_glm_v2/`.

@@ -2,10 +2,76 @@
 name: swe-multilang-production
 description: Operate and improve the Hermes SWE production pipeline. Current scope is Python mounted bundles, with stepfun-ID accounting, bounded semantic repair, identical build/delivery validation, and auditable promotion. Other languages require an explicit new scope.
 metadata:
-  version: 2.1.0
+  version: 2.2.0
 ---
 
 # Python SWE production
+
+## 2026-09-29 audited chain (takes precedence)
+
+This section supersedes older target counts, automatic-accept language, ad-hoc
+ledger handling, and unconditional worker-floor rules later in this file. The
+current supervised cohort is **150 fixed IDs**. `10 -> 40 -> 150` is a
+risk-aware default rollout example, not a fixed production invariant. Choose
+wave sizes from the current user request, resource capacity, and observed
+failure radius; every chosen wave must pass its gates before the next wave.
+The controlling Hermes session for this cohort is
+`20260918_111501_0ddc6d`; resume it rather than creating a replacement session.
+
+Codex owns changes to reusable production scripts. Hermes uses the published
+scripts, independently reruns their tests, explains the workflow, reports real
+failures, and incorporates the final operational rules into this skill. Hermes
+must not fork or patch a central script to unblock a batch.
+
+The only maintained mutation path is `/data/huron/swe/swe_dir/scripts/`.
+Before selection, harvest, quarantine, or wave expansion, run:
+
+```bash
+python3 /data/huron/swe/swe_dir/scripts/production_supervision.py preflight \
+  --delivery-root /data/huron/swe/work_20260918/delivery \
+  --output <process-artifact-root>/preflight.json
+```
+
+The preflight must exit zero with all seven sets equal: accepted IDs, accepted
+manifest, `ids.txt`, dataset, active catalog, actual bundle directories, and
+event-log replay. `ledger_events.jsonl` is the append-only source of active
+state. Never edit ledgers or copy a bundle into delivery manually. Promotion
+uses `harvest_oracle_repair_staging.py`, which calls the recoverable activation
+transaction. Removal uses `ledger_event_log.quarantine()` with a delivery-local,
+SHA-bound evidence artifact. Event-only reactivation is forbidden.
+
+Automated verifier scanning may hard-reject a source/gold oracle, otherwise it
+may only emit `needs_semantic_review`; it never grants semantic acceptance.
+Every accepted ID needs an independent review bound to task identity, commands,
+all executable verifier scripts (including nested helpers), test/gold patches,
+and the bundle manifest. The review must demonstrate the actual public entry
+point, issue input, base failure cause, observed failure, and gold success.
+It must reject a verifier that checks only a helper/boolean while skipping the
+decisive end-to-end path, or that admits a broader security/behavior regression.
+
+Every scanner suspect needs an explicit disposition. Structural, gold-shaped,
+ignored-verdict, or unpropagated-result suspects additionally require executed,
+bundle-local two-arm counterfactual evidence under `validation/counterfactual/`:
+a non-fix must remain RED and a behaviorally equivalent, differently shaped fix
+must be GREEN under the identical command and image. Review-authored external
+paths and self-reported hashes are not evidence.
+
+For the 150-ID cohort, strict offline RED/GREEN is 100%; Codex performs a fresh
+model-semantic audit sample of at least 35%. This batch also requires a 10-ID
+sample proving that self-contained images can be built and run RED/GREEN with
+no host dependency mounts; the sample is an audit obligation, not a mandatory
+first production wave. `runtime_manifest.json`, runner, source, environment, patches, and image
+identity must agree; missing or producer-host dependencies stop expansion.
+Q57, Q50, and R10 remain excluded from this supervised cohort.
+
+Freeze the denominator before work starts. Failures, pending items, and infra
+failures remain in it; never swap IDs to improve yield. Official throughput is
+computed only by `production_throughput_audit.py` from committed activation
+events; bootstrap events, directory mtimes, bundle presence, and candidate-ready
+states do not count. Report stage queues and event-based 15/60-minute rates, but
+prefer deterministic workers and repo-affinity microbatches over model agents
+waiting on builds. Read [references/production-v2.md](references/production-v2.md)
+for exact commands, transaction recovery, wave gates, and current release proof.
 
 ## 流式产出原则（信号驱动，强制）
 主 agent 不等 subagent 回执批处理。监控信号 = 服务器侧工件落盘状态：

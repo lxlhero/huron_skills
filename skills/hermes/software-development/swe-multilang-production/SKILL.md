@@ -75,6 +75,15 @@ prefer deterministic workers and repo-affinity microbatches over model agents
 waiting on builds. Read [references/production-v2.md](references/production-v2.md)
 for exact commands, transaction recovery, wave gates, and current release proof.
 
+## Dispatch brief 硬模板（2026-09-30 增补，Codex 纠偏）
+
+每个 delegate brief **必须**自带完整显式路径上下文，subagent 不得自行发现：
+- REMOTE=root@180.184.86.2:35120；SSH mux=/private/tmp/openswe_ssh_mux_35120（禁 scp，用 cat 管道）
+- process=/data/huron/swe/work_20260929_supervised150；rebuild=$process/test_rebuild；evidence=$process/evidence_packets；materials=$process/materials_v4；scripts=/data/huron/swe/swe_dir/scripts；preflight 工具=$scripts/python_mounted/tools/preflight_rehearsal.py；official delivery=/data/huron/swe/work_20260918/delivery
+- **subagent 禁止本地/全盘 search_files、find / 类探索**；只允许访问 brief 列出的自己负责的 ID/家族路径。路径缺失→立即报缺并继续其余步骤，绝不等待超时或自行搜索。
+- 控制器发现 subagent 在搜索（transcript 出现 broad search）→ 同周期 steer 注入路径，而非等它超时。
+- **确定性执行不占模型槽**：材料化/rehearsal/入队等纯命令序列交给服务器侧≤ 3 deterministic workers 流式跑（nohup/队列脚本）；模型 subagent 只做家族 recipe、异常语义与失败修复。任一 rehearsal PASS 立即进下一 gate，不等整组。
+
 ## Streaming subagent controller (mandatory)
 
 The main Hermes agent is a controller, not a per-ID worker. While at least ten
@@ -110,7 +119,9 @@ completed item advanced, and three replacements planned in that same cycle.
 3. **review PASS 落盘**（final_reviews/<ID>.json verdict=PASS）→ 立即 harvest
 4. **subagent 退出**（任何原因含 429/timeout/max_iterations）→ **必须立即查盘收遗产+同秒补位维持池子满转（目标 12-15 单元）——用户多次强调的硬性原则，不允许等回执或等批次**。实操：delegate_task(action='list') 清点存活数，低于目标立即补位；退出单元工件（材料/脚本/bundle）用 monitor 扫描归账。
 监控工具：材料→rehearsal→投队列自动化脚本统一维护在中央 `/data/huron/swe/swe_dir/scripts/`（勿依赖 /tmp 临时物；历史 /tmp/stream_monitor.py、/tmp/stream_inject.py 已废除）。注意 materials_v4 下有 .tmp 文件需 isdir 过滤；subagent 并发 >13 易触发 requests 级 429，补位小步走。
-**交付计数（C6 硬 gate，2026-09-29）**：正式计数只接受 `^stepfun_[0-9]+$` 一级目录；language dirs、accepted IDs、accepted manifest、active catalog 四集合必须相等；delivery 语言目录禁止混入 cache/deps/log/temp 等非 SWE 目录（如 python/20260918_pillow_deps 属 delivery-root 污染，计数程序必须 fail-closed 而非裸 ls|wc）。禁止将 provider overload/基础设施失败计为 SWE attempt。
+- **交付计数（C6 硬 gate，2026-09-29）**：正式计数只接受 `^stepfun_[0-9]+$` 一级目录；language dirs、accepted IDs、accepted manifest、active catalog 四集合必须相等；delivery 语言目录禁止混入 cache/deps/log/temp 等非 SWE 目录（如 python/20260918_pillow_deps 属 delivery-root 污染，计数程序必须 fail-closed 而非裸 ls|wc）。禁止将 provider overload/基础设施失败计为 SWE attempt。
+- **Gate 扫描范围教训（2026-09-30 实锤）**：mounted bundle 的 conda env 在 `runtime/conda/envs/...`；gate 排除表若只排 `env` 不排 `runtime`，会把 stdlib 全量扫入（5467 条分析 5466 条来自 env），干净 verifier 被 rejected 误伤。诊断方法：取 gate jsonl 逐 reason 归因文件路径；剔 runtime/ 重跑对照。**修复已发布（w10h1 前置）**：staging 4/4 正反例回归后正式安装（备份 before_gate_scope_fix_20260930），修后干净件=needs_semantic_review/behavior_test_candidate/reasons=[]。处置流程：误伤件按 needs_semantic_review 继续走 review，不因 gate 假 rejected 卡死。harvester review 契约：`<id>.json` flat schema（12 布尔+五字段+review_binding_sha256），嵌套 counterfactual 以 evidence 内嵌。
+- **Brief base 硬规则（2026-09-30 三次独立实锤）**：派 rebuild brief 时 base 一律从 candidate_selection.json 逐 ID 取——家族默认 base 已多次被证与真实 trajectory base 不一致（1065141=1dfbeed5 非 01f5193、1099367/1714519=165f6472 非 09f6b1c7、1607198/1090712=00f3913b 非 0c5936e089）；且开跑前必须先验证 bug 在真实 base 上复现，不可只依赖 selection 记录。
 5. **主动轮询非被动等待**：subagent 中途退出不产生 ASYNC 消息——不能等消息驱动。主 agent 每个 terminal/工具调用周期附带 delegate_task(action='list') 清点存活数。回执消息只是额外信号，不是唯一信号。
 6. **硬性下限（用户规定 2026-09-28）**：subagent 存活数**永不低于 10**。任何时点 list 清点 <10 → 立即派新单元补齐，无需权衡。检查节奏：每个工具周期+每次回执处理前后。
 7. **外部化 watchdog（已部署 2026-09-28）**：cron job `swe-pipeline-watchdog`（job_id 3d9db90e68fd，每 10 分钟，no_agent 脚本 ~/.hermes/scripts/swe_pipeline_watchdog.sh）自动扫描：待审积压>5/PASS 未 harvest>3/交付总数 3 周期停滞 → 报警注入会话。脚本报警即视为行动令：立即补对应单元。**该机制解决主 agent 长修复期间信号面盲区——报警就是行动令，不是信息**。⚠gateway 未运行则 cron 不 fire——会话开始时 cronjob_manage list 验证 job 存活。
@@ -138,6 +149,17 @@ The v2 scripts under `/data/huron/swe/swe_dir/scripts/python_pipeline_v2/` are t
   - 高风险 verifier（structural/oracle/propagation 命中者）必须**双向 counterfactual**：partial-fix 或 non-fix 打补丁时 verifier 必须红；`equivalent_fix_that_would_pass` 打上时必须绿。双向证据入 review artifact。
   - **Cluster 仅作 repo/base/env affinity**（复用诊断与环境配方），不是完成屏障：持续逐 ID 流转，candidate-ready 状态不得冒充 delivery；慢项不得阻塞同 cluster 其他 ID。
 - **持续生产吞吐 SLO（3000+ 队列设计）**：在途目标 150-300；同 repo microbatch 8-20 ID 允许但每 ID 独立 hash-bound artifact；每 15 分钟报告各 stage queue depth、15/60min active rate、p50/p95、utilization、review/harvest backlog、infra/behavior/verifier/packaging failure 分类计数；只有 transaction harvest + postcheck + active catalog 三段全过才计入交付。
+- **Family-first 生产优化（2026-09-30 Codex 指令 ACK-FAMILY-OPT）**：
+  - **计数铁律**：一个 stepfun_id 就是一个产出计数。family 复用只用于提速（问题理解/行为 verifier/source-git bundle/env/adapter/review 模板），绝不合并 ID。
+  - **canonical family index**：selection 后立即生成。`family_key = repo + full base_commit + normalized exact problem hash`；索引保留 family→全部 stepfun_ids 及 gold_hash 子簇（同 family 不同 gold 形态分开做交叉 GREEN）。
+  - **test patch 重建 family-first**：一个 family 先构建 1 个行为 verifier → clean base 上 RED → 对簇内**每个 gold variant** 交叉 GREEN；不兼容才拆 verifier variant。fan-out 后每个 ID 仍独立跑严格 RED/GREEN 双臂。
+  - **内容寻址复用**：source/git bundle、env、repo adapter、test command 按 hash 复用；最终每个 bundle 仍自足，禁止依赖共享 mount。
+  - **语义 review 复用**：按 family+verifier_hash 复用模型理解；每 ID 保留独立 identity binding、oracle gate、patch apply、counterfactual、独立红绿。static/gold-shaped/runtime-structural oracle 硬拒绝不因 family 复用放松。
+  - **failure-signature 聚合修根因**：catalog mismatch / identity not bound / missing env / commit checkout / source_verify 等基建失败按签名聚合，一次修根因+全量重放，**禁止逐 ID 派模型**。
+  - **动态流式调度**：按各 stage backlog 实时调整 subagent 数；单元完成立即补位；timeout/退出遗产及时归集；ready 后持续 review/harvest 不等整批。
+  - **append-only checkpoint/ledger 控制主会话上下文**：状态落盘（cohort/family_index/stage 进度），避免反复全库扫描。
+  - **family 指标**（纳入 15 分钟报告）：family_count、IDs/family、model_calls/family、fanout_success、gold_variant_count、per-ID RG/harvest、stage backlog。
+  - **仍须逐 ID 执行的硬 gate（不可 family 摊薄）**：①轨迹 identity 绑定 ②patch preflight/apply ③非静态 verifier gate（scanner）④严格 RED/GREEN 双臂 ⑤relocation+self-contained ⑥high-risk counterfactual ⑦per-ID hash 绑定的语义 review artifact ⑧transaction harvest+postcheck+active catalog+独立 ledger 行。
 - RED must be an issue-relevant observed behavioral failure. Dependency/import/patch/discovery errors, timeout, signals, and missing markers are failures of setup/validation, not useful RED. The generic-runner classifier only accepts nonzero exits whose output has a Traceback followed by an `^AssertionError(:...)?$` line — so a bare ParseError/ValueError from the target library is REJECTED as test_not_executed (recurring W9b/W12b/W26 defect). Any authored test_repro.py that expects library exceptions in the RED arm must catch them and re-raise as AssertionError (e.g. `except ParseError as e: raise AssertionError(...) from e`); always run the skill's preflight_rehearsal.py before declaring materials ready.
 - Derive the smallest executable test command from added/modified `test_patch` cases or the trace-backed issue repro. Prefer exact unittest methods/pytest nodeids; do not default to a whole module/repo. Preserve assertions and relevant parameterized cases. Two cases still belong to one stepfun SWE.
 - The target module must import from the patched checkout. Installing a wheel of the project itself can make both arms test an unrelated release; the gate rejects that path.
